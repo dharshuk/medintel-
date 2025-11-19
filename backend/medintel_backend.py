@@ -50,20 +50,45 @@ openai_client = OpenAI(api_key=OPENAI_KEY) if OPENAI_KEY else None
 SYSTEM_PROMPT = """
 You are MedIntel — a warm, friendly, caring personal medical assistant 💛
 
+ANALYTICAL FRAMEWORK (Internal - Do NOT show these steps):
+Before answering, think through:
+1. FACTS: What relevant medical facts apply? What lab values/symptoms are present?
+2. MECHANISMS: What biological processes are involved? Root causes?
+3. ASSESSMENT: Analyze report values against normal ranges, identify patterns
+4. RISK: What's the severity? Red flags? Timeline considerations?
+5. ALTERNATIVES: What are treatment/management options? Lifestyle factors?
+6. UNCERTAINTY: What needs clarification? What requires professional diagnosis?
+7. MEMORY: Check user history - past symptoms, labs, patterns, preferences
+
+OUTPUT: Only give the final answer - warm, clear, actionable guidance (NOT the analysis steps)
+
 Tone:
 - Speak like a gentle friend: calm, reassuring, empathetic
-- Use simple words, short sentences
+- Use simple words, clear explanations
 - For casual greetings (hi, hello, hey): respond warmly in 1-2 short sentences
-- Never use medical jargon without explaining it
+- Explain medical terms in everyday language
 
-Behavior:
-- Use ONLY provided context
-- If unsure: say "I don't know; please consult a clinician"
-- Never hallucinate medical information
-- For dangerous symptoms → recommend emergency care immediately
-- Keep responses concise and natural
+Response Guidelines:
+- ALWAYS provide comprehensive, helpful answers to medical questions
+- Use provided context when available, but also apply general medical knowledge
+- Structure responses: Brief overview → detailed explanation → practical advice
+- For symptoms: describe causes, severity indicators, when to seek care
+- For conditions: explain what it is, common treatments, lifestyle tips
+- For medications: explain purpose, how they work, common considerations
+- Include relevant statistics or facts to support advice
+- Reference USER_MEMORY (preferences, concerns) and MEDICAL_MEMORY (history, patterns) when available
 
-For simple greetings, just say hi back and ask how they're feeling - no long explanations needed.
+Safety:
+- For dangerous symptoms (chest pain, difficulty breathing, severe bleeding) → emphasize emergency care
+- If diagnosis needed: recommend consulting healthcare provider
+- Never replace professional medical diagnosis
+- Be honest about uncertainty, but still provide useful general information
+
+Format:
+- Keep paragraphs short (2-3 sentences)
+- Use bullet points for lists
+- For greetings: just say hi warmly and ask how they're feeling
+- For medical questions: provide thorough, evidence-based information
 """
 
 # ------------------------------------------------------------
@@ -268,9 +293,24 @@ def chat(req: ChatRequest):
     # Build personal hint for the AI
     personal_hint = f"USER_PROFILE: {json.dumps(profile)}\n"
     
-    # Build prompt with user profile
+    # Extract memory information from profile
+    user_memory = profile.get('preferences', {})
+    medical_memory = {
+        'history_summary': profile.get('history_summary', ''),
+        'health_concerns': profile.get('health_concerns', []),
+        'conversation_count': profile.get('conversation_count', 0)
+    }
+    
+    # Build prompt with user profile and memory
     prompt = f"""
 {personal_hint}
+
+USER MEMORY:
+{json.dumps(user_memory) if user_memory else "No user preferences recorded yet"}
+
+MEDICAL MEMORY:
+{json.dumps(medical_memory) if medical_memory.get('history_summary') or medical_memory.get('health_concerns') else "No medical history recorded yet"}
+
 {SYSTEM_PROMPT}
 
 CONTEXT:
@@ -282,7 +322,7 @@ QUESTION:
 MODE: {req.mode}
 STUDENT_MODE: {req.student_mode}
 
-Please provide a warm, friendly response with clear medical guidance.
+Think through this step-by-step internally (facts, mechanisms, values, risk, alternatives, uncertainty), then provide a warm, friendly response with clear medical guidance.
 """
 
     # Intelligent model selection based on query characteristics
@@ -290,28 +330,35 @@ Please provide a warm, friendly response with clear medical guidance.
         """
         Smart model routing:
         - OpenAI (GPT-4o-mini): Complex reasoning, diagnosis, decision-making
-        - Gemini (2.0-flash): Long documents, lab reports, multi-page context
+        - Gemini (2.0-flash): General medical queries, explanations, conditions
         - Groq (llama3-70b): Quick responses, simple Q&A, greetings
         """
         if explicit_provider:
             return explicit_provider
         
         q_lower = question.lower()
+        q_len = len(question)
         
-        # Groq for speed: Simple greetings and quick queries
-        if len(question) < 50 and any(word in q_lower for word in ['hi', 'hello', 'hey', 'thanks', 'ok', 'bye']):
+        # Groq for speed: ONLY simple greetings (very short)
+        greeting_only = ['hi', 'hello', 'hey', 'thanks', 'thank you', 'ok', 'okay', 'bye', 'goodbye']
+        if q_len < 25 and any(q_lower.strip() == word or q_lower.strip() == word + '!' for word in greeting_only):
             return "groq"
         
-        # OpenAI for reasoning: Diagnosis, complex medical logic
-        reasoning_keywords = ['why', 'should i', 'what if', 'diagnose', 'recommend', 'analyze', 'compare', 'decide', 'which treatment']
+        # OpenAI for complex reasoning: Diagnosis, comparisons, decision-making
+        reasoning_keywords = [
+            'why do i', 'why am i', 'should i take', 'what if i', 
+            'diagnose', 'which is better', 'compare', 'difference between',
+            'decide', 'choose between', 'is it safe', 'can i take',
+            'interaction', 'side effect'
+        ]
         if any(keyword in q_lower for keyword in reasoning_keywords):
             return "openai"
         
         # Gemini for long docs: Extensive context or uploaded files
-        if len(context) > 5000:  # Long document threshold
+        if len(str(context)) > 5000:
             return "gemini"
         
-        # Default to Gemini for general medical queries
+        # Default to Gemini for ALL medical questions (most comprehensive)
         return "gemini"
     
     # Select model intelligently

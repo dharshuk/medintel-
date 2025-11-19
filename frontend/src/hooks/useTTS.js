@@ -8,6 +8,21 @@ function useTTS() {
   const utteranceRef = useRef(null);
   const supported = typeof window !== 'undefined' && 'speechSynthesis' in window;
 
+  // Strip emojis and special unicode characters for cleaner TTS
+  const stripEmojis = (text) => {
+    if (!text) return '';
+    // Remove emoji ranges: emoticons, symbols, pictographs, etc.
+    return text
+      .replace(/[\u{1F000}-\u{1FFFF}]/gu, '') // Emoji range
+      .replace(/[\u{2600}-\u{26FF}]/gu, '')  // Miscellaneous symbols
+      .replace(/[\u{2700}-\u{27BF}]/gu, '')  // Dingbats
+      .replace(/[\u{FE00}-\u{FE0F}]/gu, '')  // Variation selectors
+      .replace(/[\u{1F900}-\u{1F9FF}]/gu, '') // Supplemental symbols
+      .replace(/[\u{1FA00}-\u{1FA6F}]/gu, '') // Extended pictographic
+      .replace(/💛|💙|⚠️|🔬|📊|❤️|💉|🏥/g, '') // Common medical emojis
+      .trim();
+  };
+
   const cancel = useCallback(() => {
     if (!supported) return;
     window.speechSynthesis.cancel();
@@ -22,10 +37,17 @@ function useTTS() {
         return;
       }
 
+      // Clean text by removing emojis
+      const cleanText = stripEmojis(text);
+      if (!cleanText) {
+        console.warn('No text remaining after emoji removal');
+        return;
+      }
+
       // Cancel any ongoing speech
       cancel();
 
-      const utterance = new SpeechSynthesisUtterance(text);
+      const utterance = new SpeechSynthesisUtterance(cleanText);
       utterance.rate = options.rate || 1.0;
       utterance.pitch = options.pitch || 1.0;
       utterance.volume = options.volume || 1.0;
