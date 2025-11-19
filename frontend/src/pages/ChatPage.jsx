@@ -115,17 +115,19 @@ function ChatPage() {
 
     } catch (error) {
       console.error('Chat error:', error);
+      console.error('Error details:', error.response?.data || error.message);
+      
       const fallback = {
         id: crypto.randomUUID(),
         role: 'assistant',
-        summary: 'Demo mode active.',
+        summary: 'Connection Error',
         content:
-          'MedIntel is running in local demo mode. Connect the backend at http://localhost:8000 to receive live clinical summaries and structured follow-ups.',
+          `Unable to connect to the backend. Please ensure the backend server is running on http://127.0.0.1:8000. Error: ${error.message}`,
         emotion: 'neutral',
         riskLevel: 'Green',
         confidence: 'N/A',
-        nextSteps: ['Connect backend', 'Configure API keys', 'Re-run query'],
-        sources: ['Demo Dataset'],
+        nextSteps: ['Check backend is running', 'Verify API configuration', 'Try again'],
+        sources: ['System'],
         timestamp: new Date().toISOString(),
       };
       setMessages((prev) => [...prev, fallback]);
