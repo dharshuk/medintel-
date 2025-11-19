@@ -1,0 +1,85 @@
+/* Brand gradients, glow layers, and heartbeat animation overlays for MedIntel. */
+:root {
+  --grad-top: #010915;
+  --grad-bottom: #061225;
+  --primary: #28F7CE;
+  --danger: #FF4D6D;
+  --warning: #FFB800;
+  --safe: #23c68b;
+}
+
+body {
+  background: radial-gradient(120% 120% at 50% 0%, var(--grad-top) 0%, var(--grad-bottom) 55%);
+  color: #f8fafc;
+}
+
+.medintel-bg {
+  position: relative;
+  background: linear-gradient(135deg, rgba(5, 6, 24, 0.98), rgba(6, 18, 37, 0.95));
+  overflow: hidden;
+}
+
+.medintel-bg::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: repeating-linear-gradient(
+      90deg,
+      rgba(40, 247, 206, 0.03) 0,
+      rgba(40, 247, 206, 0.03) 2px,
+      transparent 2px,
+      transparent 10px
+    ),
+    linear-gradient(120deg, rgba(40, 247, 206, 0.06), transparent 70%);
+  mix-blend-mode: screen;
+  animation: drift 20s linear infinite;
+  pointer-events: none;
+}
+
+@keyframes drift {
+  0% {
+    transform: translateY(0);
+  }
+  100% {
+    transform: translateY(-20%);
+  }
+}
+
+.heartbeat-line {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 4px;
+  background: linear-gradient(90deg, transparent, var(--primary), transparent);
+  mask-image: radial-gradient(circle at 15% 50%, black 0%, transparent 40%);
+  animation: heartbeat-pulse 3s ease-in-out infinite;
+  opacity: 0.5;
+}
+
+@keyframes heartbeat-pulse {
+  0% {
+    transform: translateX(-100%);
+    opacity: 0.3;
+  }
+  50% {
+    transform: translateX(50%);
+    opacity: 0.7;
+  }
+  100% {
+    transform: translateX(120%);
+    opacity: 0.3;
+  }
+}
+
+.risk-badge-green {
+  @apply bg-success/20 text-success border border-success/40 px-3 py-1 rounded-full text-xs font-semibold;
+}
+
+.risk-badge-amber {
+  @apply bg-warning/20 text-warning border border-warning/40 px-3 py-1 rounded-full text-xs font-semibold;
+}
+
+.risk-badge-red {
+  @apply bg-danger/20 text-danger border border-danger/40 px-3 py-1 rounded-full text-xs font-semibold;
+}
