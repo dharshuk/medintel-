@@ -140,6 +140,19 @@ function ChatPage() {
     const human = resp.human_line?.trim();
     const json = resp.json || resp; // fallback to full response if no json field
 
+    // For simple greetings or short responses, just show the human_line
+    if (human && !json.answer && !json.summary) {
+      // Simple greeting - just add the human line
+      appendMessage({
+        id: crypto.randomUUID(),
+        role: 'assistant',
+        content: human,
+        timestamp: new Date().toISOString(),
+      });
+      speak(human);
+      return;
+    }
+
     // 1) Add human_line message (if not duplicate)
     if (human) {
       const lastMsg = messages[messages.length - 1];
