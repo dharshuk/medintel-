@@ -74,7 +74,12 @@ function ChatBubble({ message, onPlayAudio, onStopAudio, showAudio, speaking }) 
       )}
 
       {message.confidence && (
-        <p className="mt-2 text-xs text-white/40">Confidence: {message.confidence}</p>
+        <div className="mt-2 flex items-center gap-3 text-xs text-white/40">
+          <span>Confidence: {message.confidence}</span>
+          {message.model_used && (
+            <span className="text-teal-400/60">• {message.model_used.toUpperCase()}</span>
+          )}
+        </div>
       )}
 
       {showAudio && isAssistant && message.content && (

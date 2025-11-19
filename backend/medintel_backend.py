@@ -221,7 +221,7 @@ def call_openai(prompt):
 class ChatRequest(BaseModel):
     question: str
     context: Optional[str] = ""
-    model_provider: Optional[str] = "gemini"
+    model_provider: Optional[str] = "auto"  # auto, gemini, groq, openai
     student_mode: Optional[bool] = False
     mode: Optional[str] = "medical"
     session_id: Optional[str] = None
@@ -236,6 +236,7 @@ class ChatResponse(BaseModel):
     emotion: str
     next_steps: List[str]
     citations: List[str]
+    model_used: Optional[str] = None  # Which AI model was used
 
 # ------------------------------------------------------------
 # CHAT ENDPOINT
@@ -284,15 +285,47 @@ STUDENT_MODE: {req.student_mode}
 Please provide a warm, friendly response with clear medical guidance.
 """
 
-    # Select model
-    if req.model_provider == "gemini":
+    # Intelligent model selection based on query characteristics
+    def select_best_model(question: str, context: str, explicit_provider: str = None):
+        """
+        Smart model routing:
+        - OpenAI (GPT-4o-mini): Complex reasoning, diagnosis, decision-making
+        - Gemini (2.0-flash): Long documents, lab reports, multi-page context
+        - Groq (llama3-70b): Quick responses, simple Q&A, greetings
+        """
+        if explicit_provider:
+            return explicit_provider
+        
+        q_lower = question.lower()
+        
+        # Groq for speed: Simple greetings and quick queries
+        if len(question) < 50 and any(word in q_lower for word in ['hi', 'hello', 'hey', 'thanks', 'ok', 'bye']):
+            return "groq"
+        
+        # OpenAI for reasoning: Diagnosis, complex medical logic
+        reasoning_keywords = ['why', 'should i', 'what if', 'diagnose', 'recommend', 'analyze', 'compare', 'decide', 'which treatment']
+        if any(keyword in q_lower for keyword in reasoning_keywords):
+            return "openai"
+        
+        # Gemini for long docs: Extensive context or uploaded files
+        if len(context) > 5000:  # Long document threshold
+            return "gemini"
+        
+        # Default to Gemini for general medical queries
+        return "gemini"
+    
+    # Select model intelligently
+    selected_model = select_best_model(req.question, str(req.context), req.model_provider if req.model_provider != "auto" else None)
+    
+    # Call the selected model
+    if selected_model == "gemini":
         raw = call_gemini(prompt)
-    elif req.model_provider == "groq":
+    elif selected_model == "groq":
         raw = call_groq(prompt)
-    elif req.model_provider == "openai":
+    elif selected_model == "openai":
         raw = call_openai(prompt)
     else:
-        raw = call_gemini(prompt)  # Default to Gemini
+        raw = call_gemini(prompt)  # Fallback
 
     if not raw:
         raw = "I'm having trouble connecting right now. Please try again in a moment 💙"
@@ -323,7 +356,7 @@ Please provide a warm, friendly response with clear medical guidance.
     ]
 
     # Citations
-    citations = ["Gemini AI Medical Knowledge", "Clinical Guidelines"]
+    citations = [f"{selected_model.upper()} AI Medical Knowledge", "Clinical Guidelines"]
 
     # Risk level
     risk_level = "Green"
@@ -340,7 +373,8 @@ Please provide a warm, friendly response with clear medical guidance.
         confidence=confidence,
         emotion=emotion,
         next_steps=next_steps,
-        citations=citations
+        citations=citations,
+        model_used=selected_model  # Include which model was used
     )
 
 # ------------------------------------------------------------
