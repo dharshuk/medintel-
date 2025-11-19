@@ -197,8 +197,16 @@ GEMINI_API_KEY=AIzaSyXXXXXXXXXXXXXXXXXXXXXXXX
 
 # Optional (for multi-model support)
 GROQ_API_KEY=gsk_XXXXXXXXXXXXXXXXXXXXXXXX
-OPENAI_API_KEY=sk-XXXXXXXXXXXXXXXXXXXXXXXX
+```env
+# Required: Get your Gemini API key from: https://makersuite.google.com/app/apikey
+GEMINI_API_KEY=AIzaSy...
+
+# Optional: For intelligent model routing (will fallback to Gemini if not provided)
+GROQ_API_KEY=gsk_...
+OPENAI_API_KEY=sk-...
 ```
+
+**Note**: Only `GEMINI_API_KEY` is required. GROQ and OpenAI keys are optional - the system will automatically fallback to Gemini if they're not configured or if those services are unavailable.
 
 ## 🐛 Troubleshooting
 
@@ -206,6 +214,11 @@ OPENAI_API_KEY=sk-XXXXXXXXXXXXXXXXXXXXXXXX
 - Ensure you're in the `backend/` directory
 - Check that `.env` file exists with valid GEMINI_API_KEY
 - Set `KMP_DUPLICATE_LIB_OK=TRUE` on Windows
+
+### Connection Error (500)
+- Verify GEMINI_API_KEY is valid in `.env` file
+- GROQ_API_KEY and OPENAI_API_KEY are optional - system will fallback to Gemini
+- Check backend logs for specific error messages
 
 ### Frontend build errors
 - Delete `node_modules/` and run `npm install` again

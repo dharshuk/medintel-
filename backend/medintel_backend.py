@@ -364,15 +364,34 @@ Think through this step-by-step internally (facts, mechanisms, values, risk, alt
     # Select model intelligently
     selected_model = select_best_model(req.question, str(req.context), req.model_provider if req.model_provider != "auto" else None)
     
-    # Call the selected model
-    if selected_model == "gemini":
-        raw = call_gemini(prompt)
-    elif selected_model == "groq":
-        raw = call_groq(prompt)
-    elif selected_model == "openai":
-        raw = call_openai(prompt)
-    else:
-        raw = call_gemini(prompt)  # Fallback
+    # Call the selected model with fallback to Gemini on error
+    raw = None
+    try:
+        if selected_model == "gemini":
+            raw = call_gemini(prompt)
+        elif selected_model == "groq":
+            raw = call_groq(prompt)
+            # If Groq fails or returns None, fallback to Gemini
+            if not raw:
+                selected_model = "gemini"
+                raw = call_gemini(prompt)
+        elif selected_model == "openai":
+            raw = call_openai(prompt)
+            # If OpenAI fails or returns None, fallback to Gemini
+            if not raw:
+                selected_model = "gemini"
+                raw = call_gemini(prompt)
+        else:
+            raw = call_gemini(prompt)  # Fallback
+    except Exception as e:
+        # On any error, fallback to Gemini
+        print(f"Error with {selected_model}: {str(e)}")
+        selected_model = "gemini"
+        try:
+            raw = call_gemini(prompt)
+        except Exception as gemini_error:
+            print(f"Gemini error: {str(gemini_error)}")
+            raw = None
 
     if not raw:
         raw = "I'm having trouble connecting right now. Please try again in a moment 💙"
