@@ -96,19 +96,38 @@ Format:
 # ------------------------------------------------------------
 
 def extract_text(file_bytes, filename):
-    """Simplified text extraction - returns placeholder for now"""
+    """Extract text from uploaded files"""
     ext = filename.lower().split(".")[-1]
     
+    # Try to decode text files
+    if ext in ["txt", "csv", "json", "md"]:
+        try:
+            return file_bytes.decode('utf-8', errors='ignore')
+        except:
+            return file_bytes.decode('latin-1', errors='ignore')
+    
+    # For PDFs and images, return placeholder but extract any available text
     if ext == "pdf":
-        return "[PDF uploaded - OCR processing available with full dependencies]"
+        # Try simple text extraction
+        try:
+            text = file_bytes.decode('utf-8', errors='ignore')
+            if len(text.strip()) > 20:
+                return text
+        except:
+            pass
+        return "[PDF file uploaded - please paste the text content or describe the report]"
     
-    if ext in ["jpg","jpeg","png"]:
-        return "[Image uploaded - OCR processing available with full dependencies]"
+    if ext in ["jpg","jpeg","png","bmp","gif"]:
+        return "[Image file uploaded - please describe what the report shows or paste the text]"
     
-    if ext in ["mp3","wav"]:
-        return "[Audio file uploaded - speech-to-text not implemented yet]"
+    if ext in ["mp3","wav","m4a"]:
+        return "[Audio file uploaded - please describe your symptoms or questions]"
     
-    return file_bytes.decode(errors="ignore")
+    # Default: try to decode as text
+    try:
+        return file_bytes.decode('utf-8', errors='ignore')
+    except:
+        return "[File uploaded - please describe the content or paste any text from the report]"
 
 # ------------------------------------------------------------
 # SIMPLE LAB PARSER
@@ -117,19 +136,34 @@ def extract_text(file_bytes, filename):
 import re
 
 def parse_labs(text):
+    """Parse lab values from text with expanded pattern matching"""
     labs = []
     patterns = {
-        "Hemoglobin": r"hemoglobin[:\s\-]*([\d\.]+)",
-        "WBC": r"wbc[:\s\-]*([\d\.]+)",
-        "Platelets": r"platelets[:\s\-]*([\d,\.]+)",
-        "FBS": r"(?:fasting blood sugar|fbs)[:\s\-]*([\d\.]+)"
+        "Hemoglobin": r"(?:hemoglobin|hb|hgb)[:\s\-]*([\d\.]+)\s*(?:g/dl|gm/dl)?",
+        "WBC": r"(?:wbc|white blood cell)[:\s\-]*([\d\.]+)\s*(?:cells/cumm|x10\^3)?",
+        "RBC": r"(?:rbc|red blood cell)[:\s\-]*([\d\.]+)\s*(?:million/cumm|x10\^6)?",
+        "Platelets": r"(?:platelet|plt)[:\s\-]*([\d,\.]+)\s*(?:lakhs|x10\^3)?",
+        "Blood Sugar": r"(?:blood sugar|glucose|fbs|fasting)[:\s\-]*([\d\.]+)\s*(?:mg/dl)?",
+        "HbA1c": r"(?:hba1c|a1c|glycated)[:\s\-]*([\d\.]+)\s*(?:%|percent)?",
+        "Cholesterol": r"(?:total cholesterol|cholesterol)[:\s\-]*([\d\.]+)\s*(?:mg/dl)?",
+        "HDL": r"(?:hdl|good cholesterol)[:\s\-]*([\d\.]+)\s*(?:mg/dl)?",
+        "LDL": r"(?:ldl|bad cholesterol)[:\s\-]*([\d\.]+)\s*(?:mg/dl)?",
+        "Triglycerides": r"(?:triglycerides|tg)[:\s\-]*([\d\.]+)\s*(?:mg/dl)?",
+        "Creatinine": r"(?:creatinine|creat)[:\s\-]*([\d\.]+)\s*(?:mg/dl)?",
+        "TSH": r"(?:tsh|thyroid)[:\s\-]*([\d\.]+)\s*(?:miu/l|uiu/ml)?",
+        "Vitamin D": r"(?:vitamin d|vit d|25-oh)[:\s\-]*([\d\.]+)\s*(?:ng/ml)?",
+        "Vitamin B12": r"(?:vitamin b12|vit b12|b12)[:\s\-]*([\d\.]+)\s*(?:pg/ml)?",
     }
     lower = text.lower()
     for name, pat in patterns.items():
         m = re.search(pat, lower)
         if m:
-            val = m.group(1)
-            labs.append({"test_name":name, "value":val.replace(",","")})
+            val = m.group(1).replace(",","")
+            try:
+                float_val = float(val)
+                labs.append({"test_name": name, "value": val, "numeric_value": float_val})
+            except:
+                labs.append({"test_name": name, "value": val})
     return labs
 
 # ------------------------------------------------------------
@@ -137,16 +171,64 @@ def parse_labs(text):
 # ------------------------------------------------------------
 
 def calculate_risk(labs):
+    """Calculate risk level based on lab values with expanded parameters"""
     risk = "Green"
+    issues = []
+    
     for lab in labs:
         name = lab["test_name"]
-        val = float(lab["value"])
+        try:
+            val = float(lab.get("numeric_value", lab["value"]))
+        except:
+            continue
+            
+        # Critical ranges
         if name == "Hemoglobin":
-            if val < 7: return "Red"
-            if val < 10: risk = "Amber"
-        if name == "FBS":
-            if val > 250: return "Red"
-            if val > 140: risk = "Amber"
+            if val < 7:
+                risk = "Red"
+                issues.append(f"Critically low hemoglobin: {val}")
+            elif val < 10 and risk == "Green":
+                risk = "Amber"
+                issues.append(f"Low hemoglobin: {val}")
+        
+        elif name == "Blood Sugar":
+            if val > 300:
+                risk = "Red"
+                issues.append(f"Critically high blood sugar: {val}")
+            elif val > 180 and risk == "Green":
+                risk = "Amber"
+                issues.append(f"Elevated blood sugar: {val}")
+        
+        elif name == "HbA1c":
+            if val > 9:
+                risk = "Red"
+                issues.append(f"Very high HbA1c: {val}%")
+            elif val > 7 and risk == "Green":
+                risk = "Amber"
+                issues.append(f"Elevated HbA1c: {val}%")
+        
+        elif name == "Creatinine":
+            if val > 3:
+                risk = "Red"
+                issues.append(f"High creatinine: {val}")
+            elif val > 1.5 and risk == "Green":
+                risk = "Amber"
+                issues.append(f"Elevated creatinine: {val}")
+        
+        elif name == "Cholesterol":
+            if val > 300 and risk == "Green":
+                risk = "Amber"
+                issues.append(f"High cholesterol: {val}")
+        
+        elif name == "WBC":
+            if val > 15 or val < 3:
+                if val > 20 or val < 2:
+                    risk = "Red"
+                    issues.append(f"Critical WBC: {val}")
+                elif risk == "Green":
+                    risk = "Amber"
+                    issues.append(f"Abnormal WBC: {val}")
+    
     return risk
 
 # ------------------------------------------------------------
@@ -479,10 +561,39 @@ def update_profile_field_endpoint(session_id: str, field: str, value: dict):
 
 @app.post("/api/v1/upload")
 async def upload(file: UploadFile = File(...)):
+    """Upload and analyze medical reports with AI insights"""
     contents = await file.read()
     text = extract_text(contents, file.filename)
     labs = parse_labs(text)
     risk = calculate_risk(labs) if labs else "Green"
+    
+    # Generate AI analysis of the uploaded content
+    analysis_prompt = f"""
+Analyze this medical report and provide clear, helpful insights:
+
+FILE: {file.filename}
+CONTENT:
+{text[:2000]}
+
+LAB VALUES FOUND:
+{json.dumps(labs, indent=2) if labs else 'No lab values detected'}
+
+Please provide:
+1. Summary of key findings
+2. Explanation of any abnormal values in simple terms
+3. Health recommendations based on the results
+4. When to consult a doctor
+
+Be warm, clear, and reassuring. Focus on actionable insights.
+"""
+    
+    ai_analysis = ""
+    try:
+        # Use Gemini for comprehensive analysis
+        ai_analysis = call_gemini(analysis_prompt)
+    except Exception as e:
+        print(f"AI analysis error: {str(e)}")
+        ai_analysis = "I've received your file. " + (f"I found {len(labs)} lab values." if labs else "Please tell me what specific information you'd like me to explain from this report.")
     
     return {
         "filename": file.filename,
@@ -491,7 +602,10 @@ async def upload(file: UploadFile = File(...)):
         "parsed_labs": labs,
         "labs": labs,
         "risk_level": risk,
-        "riskAssessment": risk
+        "riskAssessment": risk,
+        "ai_analysis": ai_analysis,
+        "summary": f"Analyzed {file.filename} - Found {len(labs)} lab values" if labs else f"Received {file.filename}",
+        "lab_count": len(labs)
     }
 
 # ------------------------------------------------------------
