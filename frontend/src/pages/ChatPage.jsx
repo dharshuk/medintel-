@@ -29,8 +29,8 @@ import useSTT from '../hooks/useSTT.js';
 import useLocalStore from '../hooks/useLocalStore.js';
 import { dummyChats, dummyReports, chatModes } from '../data/dummyData.js';
 
-// Configure axios baseURL for backend
-axios.defaults.baseURL = 'http://localhost:8000';
+// Configure axios to use Vite proxy
+axios.defaults.baseURL = '';
 
 function ChatPage() {
   const [activeMode, setActiveMode] = useState('medical');
